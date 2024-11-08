@@ -7,6 +7,7 @@ import lombok.Data;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class Main {
     public static void main(String[] args) {
@@ -17,30 +18,27 @@ public class Main {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
             System.out.println("Список покупателей:");
-            for (Visitor visitor : visitors) {
-                System.out.println(visitor.getName() + " " + visitor.getSurname());
-            }
+            Arrays.stream(visitors)
+                    .forEach(visitor -> System.out.println(visitor.getName() + " " + visitor.getSurname()));
 
             System.out.println("Количество посетителей: " + visitors.length);
-        } catch (IOException e){
+
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
+
         // Задание 2
+        Set<Book> uniqueBooks = new HashSet<>();
         try (FileReader reader = new FileReader("src/main/resources/books.json")) {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
-            Set<Book> uniqueBooks = new HashSet<>();
-
-            for (Visitor visitor : visitors) {
-                uniqueBooks.addAll(visitor.getFavoriteBooks());
-            }
+            uniqueBooks = Arrays.stream(visitors)
+                    .flatMap(e -> e.getFavoriteBooks().stream())
+                    .collect(Collectors.toSet());
 
             System.out.println("Список уникальных книг:");
-            for (Book book : uniqueBooks) {
-                System.out.println(book.getName() + " - " + book.getAuthor());
-            }
-
+            uniqueBooks.forEach(book -> System.out.println(book.getName()));
             System.out.println("Количество уникальных книг: " + uniqueBooks.size());
 
         } catch (IOException e) {
@@ -51,36 +49,31 @@ public class Main {
         try (FileReader reader = new FileReader("src/main/resources/books.json")) {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
-            Set<Book> uniqueBooks = new HashSet<>();
-
-            for (Visitor visitor : visitors) {
-                uniqueBooks.addAll(visitor.getFavoriteBooks());
-            }
-
-            List<Book> bookList = new ArrayList<>(uniqueBooks);
-
-            bookList.sort(Comparator.comparingInt(Book::getPublishingYear));
+            uniqueBooks = Arrays.stream(visitors)
+                    .flatMap(e -> e.getFavoriteBooks().stream())
+                    .collect(Collectors.toSet());
 
             System.out.println("Список книг, отсортированный по году издания:");
-            for (Book book : bookList) {
-                System.out.println(book.getName() + " - " + book.getAuthor() + " (" + book.getPublishingYear() + ")");
-            }
+            uniqueBooks.forEach(book -> System.out.println(book.getName() + " - " + book.getAuthor() + " (" + book.getPublishingYear() + ")"));
 
         } catch (IOException e) {
             e.printStackTrace();
         }
 
+
         // Задание 4
         try (FileReader reader = new FileReader("src/main/resources/books.json")) {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
-            for (Visitor visitor : visitors) {
-                for (Book book : visitor.getFavoriteBooks()) {
-                    if ("Jane Austen".equals(book.getAuthor())) {
-                        System.out.println(visitor.getName() + " " + visitor.getSurname() + " имеет в избранном книгу: " + book.getName());
-                    }
-                }
-            }
+            uniqueBooks = Arrays.stream(visitors)
+                    .flatMap(e -> e.getFavoriteBooks().stream())
+                    .collect(Collectors.toSet());
+
+            boolean hasAusten = uniqueBooks.stream()
+                    .anyMatch(e -> e.getAuthor().equals("Jane Austen"));
+
+            if (hasAusten) System.out.println("У одного из пользователей есть книга Jane Austen");
+            else System.out.println("Ни у одного из пользователей нет книги Jane Austen");
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -90,21 +83,14 @@ public class Main {
         try (FileReader reader = new FileReader("src/main/resources/books.json")) {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
-            int maxBooks = 0;
-            Visitor maxVisitor = null;
+            Optional<Visitor> maxVisitor = Arrays.stream(visitors)
+                    .max(Comparator.comparingInt(visitor -> visitor.getFavoriteBooks().size()));
 
-            for (Visitor visitor : visitors) {
-                int numberOfBooks = visitor.getFavoriteBooks().size(); // Количество книг у текущего посетителя
-
-                if (numberOfBooks > maxBooks) {
-                    maxBooks = numberOfBooks;
-                    maxVisitor = visitor;
-                }
-            }
-
-            if (maxVisitor != null) {
+            if (maxVisitor.isPresent()) {
+                int maxBooks = maxVisitor.get().getFavoriteBooks().size();
+                System.out.println("Максимальное количество книг = " + maxBooks);
                 System.out.println("Посетитель с максимальным количеством книг в избранном: "
-                        + maxVisitor.getName() + " " + maxVisitor.getSurname()
+                        + maxVisitor.get().getName() + " " + maxVisitor.get().getSurname()
                         + " с " + maxBooks + " книгами.");
             } else {
                 System.out.println("Нет посетителей с книгами в избранном.");
@@ -114,49 +100,38 @@ public class Main {
             e.printStackTrace();
         }
 
+
         // Задание 6
         try (FileReader reader = new FileReader("src/main/resources/books.json")) {
             Visitor[] visitors = gson.fromJson(reader, Visitor[].class);
 
-            int totalBooks = 0;
-            int subscribedVisitorsCount = 0;
+            double averageBooks = Arrays.stream(visitors)
+                    .filter(Visitor::isSubscribed)
+                    .mapToInt(visitor -> visitor.getFavoriteBooks().size())
+                    .average()
+                    .orElse(0);
 
-            for (Visitor visitor : visitors) {
-                if (visitor.isSubscribed()) {
-                    totalBooks += visitor.getFavoriteBooks().size();
-                    subscribedVisitorsCount++;
-                }
-            }
+            List<SmsMessage> smsMessages = Arrays.stream(visitors)
+                    .filter(Visitor::isSubscribed)
+                    .map(visitor -> {
+                        int numberOfBooks = visitor.getFavoriteBooks().size();
+                        String message;
 
-            double averageBooks = subscribedVisitorsCount > 0 ? (double) totalBooks / subscribedVisitorsCount : 0;
+                        if (numberOfBooks > averageBooks) {
+                            message = "you are a bookworm";
+                        } else if (numberOfBooks < averageBooks) {
+                            message = "read more";
+                        } else {
+                            message = "fine";
+                        }
 
-            // Создаем список SMS-сообщений
-            List<SmsMessage> smsMessages = new ArrayList<>();
+                        return new SmsMessage(visitor.getPhone(), message);
+                    })
+                    .toList();
 
-            // Группируем посетителей по категориям
-            for (Visitor visitor : visitors) {
-                if (visitor.isSubscribed()) {
-                    int numberOfBooks = visitor.getFavoriteBooks().size();
-                    String message;
-
-                    if (numberOfBooks > averageBooks) {
-                        message = "you are a bookworm";
-                    } else if (numberOfBooks < averageBooks) {
-                        message = "read more";
-                    } else {
-                        message = "fine";
-                    }
-
-                    // Добавляем SMS-сообщение в список
-                    smsMessages.add(new SmsMessage(visitor.getPhone(), message));
-                }
-            }
-
-            // Выводим SMS-сообщения на экран
             System.out.println("SMS-сообщения:");
-            for (SmsMessage sms : smsMessages) {
-                System.out.println("На номер: " + sms.getPhoneNumber() + " отправлено сообщение: " + sms.getMessage());
-            }
+            smsMessages.forEach(sms ->
+                    System.out.println("На номер: " + sms.getPhoneNumber() + " отправлено сообщение: " + sms.getMessage()));
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -187,5 +162,4 @@ class Visitor {
 class SmsMessage {
     private String phoneNumber;
     private String message;
-
 }
